@@ -1,12 +1,30 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")  -- Service pour détecter les touches
+local UserInputService = game:GetService("UserInputService")
 
--- Fonction pour créer une ligne entre le joueur local (curseur) et un autre joueur
+-- Variables pour le rectangle
+local guiEnabled = true
+local rectangle = Instance.new("Frame")
+rectangle.Size = UDim2.new(0, 500, 0, 200)  -- Taille du rectangle
+rectangle.Position = UDim2.new(0.5, -250, 0.5, -100)  -- Position au centre
+rectangle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)  -- Couleur noire
+rectangle.BackgroundTransparency = 0  -- Opacité complète
+rectangle.BorderRadius = UDim.new(0.1, 0)  -- Coins arrondis
+rectangle.Parent = game.Players.LocalPlayer.PlayerGui:WaitForChild("ScreenGui")
+
+-- Détecter la touche RightShift pour activer/désactiver le rectangle
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.RightShift and not gameProcessed then
+        guiEnabled = not guiEnabled
+        rectangle.Visible = guiEnabled
+    end
+end)
+
+-- Fonction pour créer une ligne entre le joueur local et un autre joueur
 local function createLineToPlayer(player)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Attachement de la ligne au joueur local
+        -- Attachement de la ligne au joueur local (curseur)
         local attachment0 = Instance.new("Attachment")
         attachment0.Parent = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
@@ -22,13 +40,14 @@ local function createLineToPlayer(player)
         beam.Width1 = 0.1
         beam.Transparency = NumberSequence.new(0)
         beam.Parent = LocalPlayer.Character
+        return beam -- Renvoie la ligne pour pouvoir la supprimer plus tard
     end
 end
 
 -- Fonction pour ajouter un surlignage et une étiquette de nom autour des joueurs
 local function highlightPlayer(player)
     if player ~= LocalPlayer and player.Character then
-        -- Ajout d'un surlignage (Highlight) autour du joueur
+        -- Surlignage (Highlight)
         if not player.Character:FindFirstChild("Highlight") then
             local highlight = Instance.new("Highlight")
             highlight.Adornee = player.Character
@@ -65,13 +84,14 @@ local function highlightPlayer(player)
                 textLabel.Text = player.Name .. " - " .. math.floor(distance) .. " m"
             end)
         end
+    end
+end
 
-        -- Créer une ligne entre le joueur local et ce joueur
-        createLineToPlayer(player)
-
-        -- Afficher la barre de santé à gauche du joueur
+-- Fonction pour gérer la barre de santé des joueurs
+local function createHealthBar(player)
+    if player.Character then
         if not player.Character:FindFirstChild("HealthBar") then
-            -- Création de l'affichage de la barre de santé
+            -- Création de la barre de santé
             local healthBillboard = Instance.new("BillboardGui")
             healthBillboard.Name = "HealthBar"
             healthBillboard.Adornee = player.Character:WaitForChild("Head")
@@ -100,77 +120,34 @@ local function highlightPlayer(player)
                 local healthPercentage = humanoid.Health / humanoid.MaxHealth
                 healthFrame.Size = UDim2.new(1, 0, healthPercentage, 0)  -- Ajuste la hauteur de la barre
             end)
+        end
+    end
+end
 
-            -- Ajuster la taille de la barre de santé pour correspondre à la taille du personnage
-            RunService.RenderStepped:Connect(function()
-                -- Obtenir la hauteur du personnage
-                local humanoid = player.Character:WaitForChild("Humanoid")
-                local characterHeight = humanoid.HipWidth + humanoid.HipHeight  -- Estimation de la hauteur du personnage
-
-                -- Ajuster la hauteur de la barre de santé pour correspondre à la hauteur du personnage
-                healthBillboard.Size = UDim2.new(0, 10, 0, characterHeight)
-            end)
-
-            -- Réduire la taille de la barre de santé en fonction de la distance
-            RunService.RenderStepped:Connect(function()
+-- Fonction principale pour appliquer les effets aux joueurs
+local function updatePlayerEffects()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if player.Character then
+                -- Vérifier la distance et ne créer les effets que si le joueur est dans un rayon de 800 mètres
                 local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                -- Réduire la taille de la barre avec l'augmentation de la distance
-                local scaleFactor = math.max(0.1, 1 - distance / 100)  -- Plus la distance augmente, plus la barre se réduit
-                local humanoid = player.Character:WaitForChild("Humanoid")
-                local characterHeight = humanoid.HipWidth + humanoid.HipHeight  -- Hauteur du personnage
-
-                -- Ajuster la taille de la barre de santé selon la distance et la taille du joueur
-                healthBillboard.Size = UDim2.new(0, 10 * scaleFactor, 0, characterHeight * scaleFactor)
-            end)
+                if distance <= 800 then
+                    -- Créer la ligne, la barre de vie et le surlignage
+                    createLineToPlayer(player)
+                    createHealthBar(player)
+                    highlightPlayer(player)
+                end
+            end
         end
     end
 end
 
--- Ajouter un GUI au démarrage du code (un rectangle)
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RectangleGui"
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- Appliquer les effets aux joueurs existants
+updatePlayerEffects()
 
--- Créer un rectangle dans le GUI
-local rectangle = Instance.new("Frame")
-rectangle.Size = UDim2.new(0, 700, 0, 400)  -- Taille agrandie du rectangle
-rectangle.Position = UDim2.new(0.5, -350, 0.5, -200)  -- Centré à l'écran
-rectangle.BackgroundColor3 = Color3.new(0, 0, 0)  -- Noir
-rectangle.BackgroundTransparency = 0  -- Opaque
-rectangle.BorderSizePixel = 0  -- Pas de bordure
-rectangle.Parent = screenGui
-
--- Ajouter des coins arrondis au rectangle
-rectangle.CornerRadius = UDim.new(0, 20)  -- Coins arrondis de 20 pixels
-
--- Variable pour suivre l'état de la visibilité du rectangle
-local isVisible = true
-
--- Fonction pour basculer la visibilité du rectangle quand RightShift est pressé
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end  -- Ignorer si le jeu a déjà traité l'entrée
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.RightShift then
-        -- Bascule la visibilité
-        isVisible = not isVisible
-        rectangle.Visible = isVisible
-    end
-end)
-
--- Applique l'effet à tous les joueurs existants
-for _, player in pairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
-        if player.Character then
-            highlightPlayer(player)
-        end
-        player.CharacterAdded:Connect(function()
-            highlightPlayer(player)
-        end)
-    end
-end
-
--- Applique l'effet à un joueur lorsqu'il rejoint
+-- Appliquer l'effet aux nouveaux joueurs
 Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(function()
-        highlightPlayer(player)
+        updatePlayerEffects()
     end)
 end)
